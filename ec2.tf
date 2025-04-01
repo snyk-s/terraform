@@ -13,6 +13,7 @@ resource "aws_instance" "demo-instance" {
   root_block_device {
     volume_type = "gp3"
     volume_size = 50
+    encrypted   = true
   }
   key_name = var.t_key_name
 
