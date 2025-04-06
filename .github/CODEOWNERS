@@ -1,9 +1,0 @@
-# These owners will be the default owners for everything in the repo
-* @username1 @username2
-
-# Specific file patterns
-*.js @js-expert
-*.py @python-expert
-
-# Specific directories
-/docs/ @documentation-team

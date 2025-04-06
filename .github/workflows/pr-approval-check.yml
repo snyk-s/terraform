@@ -3,7 +3,14 @@ name: Pull Request Approval Check
 on:
   pull_request:
     branches: [ main ]
-    types: [opened, synchronize, reopened, ready_for_review, review_requested]
+    types: [opened, synchronize, reopened, ready_for_review, review_requested, review_request_removed]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+# Add permissions block to request necessary access
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   check-approval:
@@ -12,50 +19,87 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
-      - name: Check PR approval
+      - name: Check PR approval status
         id: check_approval
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { data: reviews } = await github.rest.pulls.listReviews({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number
-            });
-            
-            // Get the latest review from each reviewer
-            const latestReviews = {};
-            reviews.forEach(review => {
-              // Only consider reviews with a state (APPROVED, CHANGES_REQUESTED, COMMENTED)
-              if (review.state) {
-                latestReviews[review.user.id] = review;
+            try {
+              // Get the pull request details
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+              
+              console.log('PR State:', pr.state);
+              
+              // Check if the PR is mergeable and has required approvals
+              const { data: prDetails } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
+              
+              console.log('Mergeable State:', prDetails.mergeable_state);
+              
+              // Get the latest review from each reviewer
+              const { data: reviews } = await github.rest.pulls.listReviews({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+              
+              const latestReviews = {};
+              reviews.forEach(review => {
+                if (review.state) {
+                  latestReviews[review.user.id] = review;
+                }
+              });
+              
+              let approvalCount = 0;
+              let rejectionCount = 0;
+              
+              Object.values(latestReviews).forEach(review => {
+                if (review.state === 'APPROVED') {
+                  approvalCount++;
+                } else if (review.state === 'CHANGES_REQUESTED') {
+                  rejectionCount++;
+                }
+              });
+              
+              console.log(`Approvals: ${approvalCount}, Rejections: ${rejectionCount}`);
+              
+              // If mergeable_state is 'blocked', it means required reviews are missing
+              if (prDetails.mergeable_state === 'blocked') {
+                console.log('PR is blocked from merging. This may be due to missing approvals or other branch protection rules.');
+                core.setFailed('This PR requires approvals before it can be merged.');
+                return;
               }
-            });
-            
-            // Check if there's at least one approval and no rejections
-            let approvalCount = 0;
-            let rejectionCount = 0;
-            
-            Object.values(latestReviews).forEach(review => {
-              if (review.state === 'APPROVED') {
-                approvalCount++;
-              } else if (review.state === 'CHANGES_REQUESTED') {
-                rejectionCount++;
+              
+              // If mergeable_state is 'dirty', it means there are conflicts
+              if (prDetails.mergeable_state === 'dirty') {
+                console.log('PR has conflicts that need to be resolved.');
+                core.setFailed('This PR has conflicts that need to be resolved before merging.');
+                return;
               }
-            });
-            
-            console.log(`Approvals: ${approvalCount}, Rejections: ${rejectionCount}`);
-            
-            if (rejectionCount > 0) {
-              core.setFailed('Changes have been requested. Please address them before merging.');
-              return;
-            }
-            
-            if (approvalCount === 0) {
-              console.log('No approvals yet. Waiting for review.');
-            } else {
-              console.log('PR has been approved!');
+              
+              if (rejectionCount > 0) {
+                core.setFailed('Changes have been requested. Please address them before merging.');
+                return;
+              }
+              
+              if (approvalCount === 0) {
+                console.log('No approvals yet. Waiting for review.');
+              } else {
+                console.log('PR has been approved!');
+              }
+              
+              console.log('PR check completed successfully.');
+            } catch (error) {
+              console.error('Error checking PR status:', error);
+              core.setFailed(`Error checking PR status: ${error.message}`);
             }
 
   build-and-test:
@@ -71,3 +115,5 @@ jobs:
           echo "Running tests..."
           # Replace with your actual test commands
           # For example: npm test, pytest, etc.
+          
+          
