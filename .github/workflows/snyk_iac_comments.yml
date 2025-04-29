@@ -19,90 +19,40 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           # Set the Snyk API endpoint for the US-02 environment
           SNYK_API: https://api.us.snyk.io
-        with:
-          args: --json
-          
-      - name: Save Snyk results
-        if: always()
-        run: |
-          # Create the snyk-results.json file with output from previous step
-          echo '${{ steps.snyk-test.outputs.stdout }}' > snyk-results.json
-          # Show first few lines of the file for debugging
-          echo "Preview of snyk-results.json:"
-          head -20 snyk-results.json
       
-      - name: Generate Snyk Report
-        id: snyk-report
+      - name: Create PR Comment Content
         if: github.event_name == 'pull_request'
+        id: create-comment
         run: |
-          echo "### Snyk Infrastructure as Code Security Report" > snyk-report.md
-          echo "" >> snyk-report.md
+          # Create a markdown file with the Snyk output
+          echo "### Snyk Infrastructure as Code Scan Results" > snyk-report.md
+          echo "```" >> snyk-report.md
+          echo "${{ steps.snyk-test.outputs.stdout }}" >> snyk-report.md
+          echo "```" >> snyk-report.md
           
-          if [ -f snyk-results.json ]; then
-            # First, let's examine the structure of the JSON file
-            echo "Analyzing Snyk results structure..."
-            
-            # Check if it's an array or an object
-            if jq 'if type=="array" then true else false end' snyk-results.json | grep -q true; then
-              echo "Results are in array format"
-              # Extract basic stats from the array JSON file
-              ISSUES=$(jq '[ .[].vulnerabilities | length ] | add // 0' snyk-results.json)
-              HIGH=$(jq '[ .[].vulnerabilities[] | select(.severity=="high") ] | length // 0' snyk-results.json)
-              MEDIUM=$(jq '[ .[].vulnerabilities[] | select(.severity=="medium") ] | length // 0' snyk-results.json)
-              LOW=$(jq '[ .[].vulnerabilities[] | select(.severity=="low") ] | length // 0' snyk-results.json)
-            else
-              echo "Results are in object format"
-              # Extract basic stats from the object JSON file
-              ISSUES=$(jq '.vulnerabilities | length // 0' snyk-results.json)
-              HIGH=$(jq '[.vulnerabilities[] | select(.severity=="high")] | length // 0' snyk-results.json)
-              MEDIUM=$(jq '[.vulnerabilities[] | select(.severity=="medium")] | length // 0' snyk-results.json)
-              LOW=$(jq '[.vulnerabilities[] | select(.severity=="low")] | length // 0' snyk-results.json)
-            fi
-            
-            # Add summary to the report
-            echo "#### Summary:" >> snyk-report.md
-            echo "- 🔴 High severity issues: $HIGH" >> snyk-report.md
-            echo "- 🟠 Medium severity issues: $MEDIUM" >> snyk-report.md
-            echo "- 🟡 Low severity issues: $LOW" >> snyk-report.md
-            echo "- 🔢 Total issues: $ISSUES" >> snyk-report.md
-            echo "" >> snyk-report.md
-            
-            # Add details if there are any issues
-            if [ "$ISSUES" -gt 0 ]; then
-              echo "#### Details:" >> snyk-report.md
-              echo "" >> snyk-report.md
-              
-              # Process each high severity issue
-              if [ "$HIGH" -gt 0 ]; then
-                echo "##### High Severity Issues:" >> snyk-report.md
-                if jq 'if type=="array" then true else false end' snyk-results.json | grep -q true; then
-                  jq -r '.[].vulnerabilities[] | select(.severity=="high") | "- **[\(.id)](\(.documentation // "https://snyk.io/security"))**: \(.title // .name) in `\(.path // "unknown")`"' snyk-results.json >> snyk-report.md
-                else
-                  jq -r '.vulnerabilities[] | select(.severity=="high") | "- **[\(.id)](\(.documentation // "https://snyk.io/security"))**: \(.title // .name) in `\(.path // "unknown")`"' snyk-results.json >> snyk-report.md
-                fi
-                echo "" >> snyk-report.md
-              fi
-              
-              # Process medium severity issues (limited to top 5)
-              if [ "$MEDIUM" -gt 0 ]; then
-                echo "##### Medium Severity Issues (top 5):" >> snyk-report.md
-                if jq 'if type=="array" then true else false end' snyk-results.json | grep -q true; then
-                  jq -r '.[].vulnerabilities[] | select(.severity=="medium") | "- **[\(.id)](\(.documentation // "https://snyk.io/security"))**: \(.title // .name) in `\(.path // "unknown")`"' snyk-results.json | head -5 >> snyk-report.md
-                else
-                  jq -r '.vulnerabilities[] | select(.severity=="medium") | "- **[\(.id)](\(.documentation // "https://snyk.io/security"))**: \(.title // .name) in `\(.path // "unknown")`"' snyk-results.json | head -5 >> snyk-report.md
-                fi
-                echo "" >> snyk-report.md
-              fi
-            else
-              echo "✅ No infrastructure issues found!" >> snyk-report.md
-            fi
-          else
-            echo "❓ No Snyk results file found. The scan may have failed." >> snyk-report.md
-          fi
+          # Extract issue summary for the job summary
+          TOTAL_ISSUES=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "Total issues: [0-9]\+ \[" | grep -o "[0-9]\+")
+          CRITICAL=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "\[.*\]" | grep -o "[0-9]\+ critical" | grep -o "[0-9]\+")
+          HIGH=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "\[.*\]" | grep -o "[0-9]\+ high" | grep -o "[0-9]\+")
+          MEDIUM=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "\[.*\]" | grep -o "[0-9]\+ medium" | grep -o "[0-9]\+")
+          LOW=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "\[.*\]" | grep -o "[0-9]\+ low" | grep -o "[0-9]\+")
           
-          cat snyk-report.md > $GITHUB_STEP_SUMMARY
+          # Default to 0 if not found
+          CRITICAL=${CRITICAL:-0}
+          HIGH=${HIGH:-0}
+          MEDIUM=${MEDIUM:-0}
+          LOW=${LOW:-0}
+          TOTAL_ISSUES=${TOTAL_ISSUES:-0}
           
-          # Create a variable with the report content for the PR comment step
+          # Add a short summary for the job summary page
+          echo "## Snyk Infrastructure as Code Scan Results" > $GITHUB_STEP_SUMMARY
+          echo "- 🔴 Critical issues: ${CRITICAL}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔴 High issues: ${HIGH}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🟠 Medium issues: ${MEDIUM}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🟡 Low issues: ${LOW}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔢 Total issues: ${TOTAL_ISSUES}" >> $GITHUB_STEP_SUMMARY
+          
+          # Create a multiline output variable for the PR comment step
           REPORT_CONTENT=$(cat snyk-report.md)
           echo "report<<EOF" >> $GITHUB_OUTPUT
           echo "$REPORT_CONTENT" >> $GITHUB_OUTPUT
@@ -114,7 +64,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const reportContent = `${{ steps.snyk-report.outputs.report }}`;
+            const reportContent = `${{ steps.create-comment.outputs.report }}`;
             
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -123,7 +73,7 @@ jobs:
             });
             
             const botComment = comments.find(comment => {
-              return comment.user.type === 'Bot' && comment.body.includes('Snyk Infrastructure as Code Security Report');
+              return comment.user.type === 'Bot' && comment.body.includes('Snyk Infrastructure as Code Scan Results');
             });
             
             if (botComment) {
