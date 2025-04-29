@@ -13,4 +13,3 @@ jobs:
           SNYK_API: https://api.us.snyk.io
           with:
           args: --target-dir=go_app
-          command: monitor
