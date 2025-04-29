@@ -26,23 +26,18 @@ jobs:
         run: |
           # Create a markdown file with the Snyk output
           echo "### Snyk Infrastructure as Code Scan Results" > snyk-report.md
-          echo "```" >> snyk-report.md
-          echo "${{ steps.snyk-test.outputs.stdout }}" >> snyk-report.md
-          echo "```" >> snyk-report.md
+          echo '```' >> snyk-report.md
+          # Safely handle the multiline output using a temporary file
+          echo '${{ steps.snyk-test.outputs.stdout }}' > snyk-output-temp.txt
+          cat snyk-output-temp.txt >> snyk-report.md
+          echo '```' >> snyk-report.md
           
-          # Extract issue summary for the job summary
-          TOTAL_ISSUES=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "Total issues: [0-9]\+ \[" | grep -o "[0-9]\+")
-          CRITICAL=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "\[.*\]" | grep -o "[0-9]\+ critical" | grep -o "[0-9]\+")
-          HIGH=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "\[.*\]" | grep -o "[0-9]\+ high" | grep -o "[0-9]\+")
-          MEDIUM=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "\[.*\]" | grep -o "[0-9]\+ medium" | grep -o "[0-9]\+")
-          LOW=$(echo "${{ steps.snyk-test.outputs.stdout }}" | grep -o "\[.*\]" | grep -o "[0-9]\+ low" | grep -o "[0-9]\+")
-          
-          # Default to 0 if not found
-          CRITICAL=${CRITICAL:-0}
-          HIGH=${HIGH:-0}
-          MEDIUM=${MEDIUM:-0}
-          LOW=${LOW:-0}
-          TOTAL_ISSUES=${TOTAL_ISSUES:-0}
+          # Extract issue summary for the job summary using the temporary file
+          TOTAL_ISSUES=$(grep -o "Total issues: [0-9]\+ \[" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+" || echo "0")
+          CRITICAL=$(grep -o "\[.*\]" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+ critical" | grep -o "[0-9]\+" || echo "0")
+          HIGH=$(grep -o "\[.*\]" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+ high" | grep -o "[0-9]\+" || echo "0")
+          MEDIUM=$(grep -o "\[.*\]" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+ medium" | grep -o "[0-9]\+" || echo "0")
+          LOW=$(grep -o "\[.*\]" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+ low" | grep -o "[0-9]\+" || echo "0")
           
           # Add a short summary for the job summary page
           echo "## Snyk Infrastructure as Code Scan Results" > $GITHUB_STEP_SUMMARY
