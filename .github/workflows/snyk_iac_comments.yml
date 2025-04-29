@@ -59,7 +59,9 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const reportContent = `${{ steps.create-comment.outputs.report }}`;
+            // Read the report from the file instead of from outputs
+            const fs = require('fs');
+            const reportContent = fs.readFileSync('snyk-report.md', 'utf8');
             
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
