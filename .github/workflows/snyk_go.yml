@@ -10,3 +10,5 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           SNYK_API: https://api.us.snyk.io
+          with:
+          args: --target-dir=go_app
