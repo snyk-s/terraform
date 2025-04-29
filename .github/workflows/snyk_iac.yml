@@ -12,5 +12,5 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           # Set the Snyk API endpoint for the US-02 environment
           SNYK_API: https://api.us.snyk.io
-        with: 
-          command: monitor
+        # with: 
+        #   command: monitor
