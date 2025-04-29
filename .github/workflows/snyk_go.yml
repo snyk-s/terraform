@@ -7,10 +7,8 @@ jobs:
       - uses: actions/checkout@master
       - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/golang@master
-        continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           SNYK_API: https://api.us.snyk.io
         with:
-          command: snyk test
-          args: --target-dir=go_app
+           args: --target-dir=go_app
