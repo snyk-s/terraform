@@ -12,4 +12,5 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           SNYK_API: https://api.us.snyk.io
         with:
+          command: snyk test
           args: --target-dir=go_app
