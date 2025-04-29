@@ -23,8 +23,3 @@ resource "aws_instance" "demo-instance" {
     "gfl:application-os" = "linux"
   }
 }
-
-
-
-
-
