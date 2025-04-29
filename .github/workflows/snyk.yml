@@ -10,5 +10,4 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-            command: test -d
-            args: --org=70bd0e64-b8dc-4f97-826a-daa3af96355c 
+            command: test
