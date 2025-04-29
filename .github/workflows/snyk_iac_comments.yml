@@ -1,0 +1,112 @@
+name: Snyk Infrastructure as Code
+on:
+  pull_request:
+    branches: [ main, dev ]
+  push:
+    branches: [ main, dev ]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Run Snyk IAC Test
+        id: snyk-test
+        uses: snyk/actions/iac@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          # Set the Snyk API endpoint for the US-02 environment
+          SNYK_API: https://api.us.snyk.io
+        with:
+          args: --json > snyk-results.json
+      
+      - name: Generate Snyk Report
+        id: snyk-report
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "### Snyk Infrastructure as Code Security Report" > snyk-report.md
+          echo "" >> snyk-report.md
+          
+          if [ -f snyk-results.json ]; then
+            # Extract basic stats from the JSON file
+            ISSUES=$(jq '[.infrastructureAsCodeIssues | length] | add' snyk-results.json)
+            HIGH=$(jq '[.infrastructureAsCodeIssues[] | select(.severity=="high") | .id] | length' snyk-results.json)
+            MEDIUM=$(jq '[.infrastructureAsCodeIssues[] | select(.severity=="medium") | .id] | length' snyk-results.json)
+            LOW=$(jq '[.infrastructureAsCodeIssues[] | select(.severity=="low") | .id] | length' snyk-results.json)
+            
+            # Add summary to the report
+            echo "#### Summary:" >> snyk-report.md
+            echo "- 🔴 High severity issues: $HIGH" >> snyk-report.md
+            echo "- 🟠 Medium severity issues: $MEDIUM" >> snyk-report.md
+            echo "- 🟡 Low severity issues: $LOW" >> snyk-report.md
+            echo "- 🔢 Total issues: $ISSUES" >> snyk-report.md
+            echo "" >> snyk-report.md
+            
+            # Add details if there are any issues
+            if [ "$ISSUES" -gt 0 ]; then
+              echo "#### Details:" >> snyk-report.md
+              echo "" >> snyk-report.md
+              
+              # Process each high severity issue
+              if [ "$HIGH" -gt 0 ]; then
+                echo "##### High Severity Issues:" >> snyk-report.md
+                jq -r '.infrastructureAsCodeIssues[] | select(.severity=="high") | "- **[\(.id)](\(.documentation))**: \(.title) in `\(.path)`"' snyk-results.json >> snyk-report.md
+                echo "" >> snyk-report.md
+              fi
+              
+              # Process medium severity issues (limited to top 5)
+              if [ "$MEDIUM" -gt 0 ]; then
+                echo "##### Medium Severity Issues (top 5):" >> snyk-report.md
+                jq -r '.infrastructureAsCodeIssues[] | select(.severity=="medium") | "- **[\(.id)](\(.documentation))**: \(.title) in `\(.path)`"' snyk-results.json | head -5 >> snyk-report.md
+                echo "" >> snyk-report.md
+              fi
+            else
+              echo "✅ No infrastructure issues found!" >> snyk-report.md
+            fi
+          else
+            echo "❓ No Snyk results file found. The scan may have failed." >> snyk-report.md
+          fi
+          
+          cat snyk-report.md > $GITHUB_STEP_SUMMARY
+          
+          # Create a variable with the report content for the PR comment step
+          REPORT_CONTENT=$(cat snyk-report.md)
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.MYP_TOKEN }}
+          script: |
+            const reportContent = `${{ steps.snyk-report.outputs.report }}`;
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => {
+              return comment.user.type === 'Bot' && comment.body.includes('Snyk Infrastructure as Code Security Report');
+            });
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: reportContent
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: reportContent
+              });
+            }
