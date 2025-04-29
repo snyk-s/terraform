@@ -10,6 +10,7 @@ jobs:
         continue-on-error: true # To make sure that SARIF upload gets called
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_API: https://api.us.snyk.io
         with:
           args: --all-projects --sarif-file-output=snyk.sarif --target-dir=go_app
       - name: Upload result to GitHub Code Scanning
