@@ -6,7 +6,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Run Snyk IAC Test
-        uses: snyk/actions@0.4.0/iac@master
+        uses: snyk/actions/iac@master
         continue-on-error: true
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
