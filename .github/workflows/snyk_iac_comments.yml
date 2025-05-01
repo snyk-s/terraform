@@ -1,0 +1,90 @@
+name: Snyk Infrastructure as Code
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Run Snyk IAC Test
+        id: snyk-test
+        uses: snyk/actions/iac@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          # Set the Snyk API endpoint for the US-02 environment
+          SNYK_API: https://api.us.snyk.io
+      
+      - name: Create PR Comment Content
+        if: github.event_name == 'pull_request'
+        id: create-comment
+        run: |
+          # Create a markdown file with the Snyk output
+          echo "### Snyk Infrastructure as Code Scan Results" > snyk-report.md
+          echo '```' >> snyk-report.md
+          # Safely handle the multiline output using a temporary file
+          echo '${{ steps.snyk-test.outputs.stdout }}' > snyk-output-temp.txt
+          cat snyk-output-temp.txt >> snyk-report.md
+          echo '```' >> snyk-report.md
+          
+          # Extract issue summary for the job summary using the temporary file
+          TOTAL_ISSUES=$(grep -o "Total issues: [0-9]\+ \[" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+" || echo "0")
+          CRITICAL=$(grep -o "\[.*\]" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+ critical" | grep -o "[0-9]\+" || echo "0")
+          HIGH=$(grep -o "\[.*\]" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+ high" | grep -o "[0-9]\+" || echo "0")
+          MEDIUM=$(grep -o "\[.*\]" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+ medium" | grep -o "[0-9]\+" || echo "0")
+          LOW=$(grep -o "\[.*\]" snyk-output-temp.txt 2>/dev/null | grep -o "[0-9]\+ low" | grep -o "[0-9]\+" || echo "0")
+          
+          # Add a short summary for the job summary page
+          echo "## Snyk Infrastructure as Code Scan Results" > $GITHUB_STEP_SUMMARY
+          echo "- 🔴 Critical issues: ${CRITICAL}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔴 High issues: ${HIGH}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🟠 Medium issues: ${MEDIUM}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🟡 Low issues: ${LOW}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔢 Total issues: ${TOTAL_ISSUES}" >> $GITHUB_STEP_SUMMARY
+          
+          # Create a multiline output variable for the PR comment step
+          REPORT_CONTENT=$(cat snyk-report.md)
+          echo "report<<EOF" >> $GITHUB_OUTPUT
+          echo "$REPORT_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Read the report from the file instead of from outputs
+            const fs = require('fs');
+            const reportContent = fs.readFileSync('snyk-report.md', 'utf8');
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => {
+              return comment.user.type === 'Bot' && comment.body.includes('Snyk Infrastructure as Code Scan Results');
+            });
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: reportContent
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: reportContent
+              });
+            }
