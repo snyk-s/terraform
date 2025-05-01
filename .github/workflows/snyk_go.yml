@@ -1,4 +1,4 @@
-name: Workflow for Golang using Snyk
+name: Example workflow for Golang using Snyk
 on: push
 jobs:
   security:
@@ -7,8 +7,8 @@ jobs:
       - uses: actions/checkout@master
       - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/golang@master
+    working-directory: ./go_app
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-          SNYK_API: https://api.us.snyk.io
         with:
-           args: --target-dir=go_app
+          args: --severity-threshold=high
