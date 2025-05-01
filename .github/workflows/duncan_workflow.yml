@@ -36,9 +36,6 @@ jobs:
       run: npm i -g snyk-to-html  
                
     # Install Snyk Filter 
-    - name: Install SNyk Filter
-      run: npm i -g snyk-filter
-
     # Run Snyk OpenSource Test
     - name: Snyk OpenSource Test
       run: 
@@ -73,7 +70,7 @@ jobs:
 
     #Snyk Monitor (Target in Preferred Org)
     - name: Snyk Monitor to default Org
-      run: snyk monitor 
+      run: snyk monitor --org=snyk_test
       continue-on-error: true
     
     #Collect all the generated html files and upload to a GitHub Artifact
