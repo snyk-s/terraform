@@ -1,0 +1,81 @@
+name: Prebuilt repo + Snyk Security Scanning (OS, Code, Docker, IaC and Snyk Filter)
+
+# Runs 4 Snyk Products (Code, Open Source, Container, IaC) + snyk filter
+# Snyk installation via npm.
+# Node.js version: 18.4
+# Outputs the results to json file then Snyk-to-htm outputs to HTML files/GitHub Artifact
+
+# Prerequisites:
+# - Set a SNYK_TOKEN in the pipelines secrets  
+# (Repo Settings, Security, Secets & Variables, Actions, Repo Secrets)
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      SNYK_API: https://api.us.snyk.io
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Use Node.js for installing Snyk 
+      uses: actions/setup-node@v2
+      with:
+        node-version: 18.4
+
+    # Install & prepare Snyk
+    - run: npm install --location=global snyk
+
+    # Authenticate Snyk      
+    - run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+    # Install & prepare Snyk-to-Html tool
+    - name: install snyk-to-html
+      run: npm i -g snyk-to-html  
+               
+    # Install Snyk Filter 
+    # Run Snyk OpenSource Test
+    - name: Snyk OpenSource Test
+      run: 
+          snyk test --json-file-output=results-opensource.json
+      continue-on-error: true
+
+    # Run Snyk Code Test
+    - name: Snyk Code Scanning
+      run: snyk code test --json-file-output=results-code.json 
+      continue-on-error: true
+
+    # Run Snyk IaC Test
+    - name: Snyk Infrastructure-as-Code Scanning
+      run: snyk iac test --json-file-output=results-iac.json
+      continue-on-error: true
+
+    # Run Snyk Filter Test (see /.snyk-filter.snyk.yml for config)
+    # Snyk-filer cannot create an output file so we pipe directly to snyk-to-html
+    - name: Snyk filter test
+      run: snyk-filter --json -i results-opensource.json | snyk-to-html -o results-snykfilter.html
+      continue-on-error: true
+      
+    # Use Snyk to Html on json files (use -s for summary and -a for actionable issues)
+    - name: Snyk to HTML on json files
+      run: |
+       snyk-to-html -i results-opensource.json -o results-opensource.html
+       snyk-to-html -i results-opensource.json -o results-opensourceSummary.html -s
+       snyk-to-html -i results-opensource.json -o results-opensourceActionable.html -a
+       snyk-to-html -i results-code.json -o results-code.html 
+       snyk-to-html -i results-iac.json -o results-iac.html 
+       snyk-to-html -i results-container.json -o results-container.html
+
+    #Snyk Monitor (Target in Preferred Org)
+    - name: Snyk Monitor to default Org
+      run: snyk monitor --org=snyk_test
+      continue-on-error: true
+    
+    #Collect all the generated html files and upload to a GitHub Artifact
+    - name: Use the Upload Artifact GitHub Action
+      uses: actions/upload-artifact@v4
+      with:
+          name: snykresults
+          path: ./*.html   
