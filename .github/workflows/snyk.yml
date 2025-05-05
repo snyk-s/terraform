@@ -40,6 +40,8 @@ jobs:
           [ -f snyk-code-results.json ] || touch snyk-code-results.json
           [ -f snyk-code-results.txt ] || touch snyk-code-results.txt
           [ -f snyk-code-results.html ] || touch snyk-code-results.html
+          echo "===== Snyk Code Test Results ====="
+          cat snyk-code-results.txt
 
       - name: Run Snyk test for IaC
         id: snyk-iac
@@ -50,6 +52,8 @@ jobs:
           # Ensure output files exist
           [ -f snyk-iac-results.json ] || touch snyk-iac-results.json
           [ -f snyk-iac-results.txt ] || touch snyk-iac-results.txt
+          echo "===== Snyk IaC Test Results ====="
+          cat snyk-iac-results.txt
 
       - name: Combine Snyk Results
         run: |
