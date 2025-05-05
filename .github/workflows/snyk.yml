@@ -1,0 +1,80 @@
+
+name: Snyk Security Scan
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+jobs:
+  snyk:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (required for Snyk CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Snyk CLI and HTML reporter
+        run: |
+          npm install -g snyk
+          npm install -g snyk-to-html
+
+      - name: Run Snyk test for code dependencies
+        id: snyk-code
+        continue-on-error: true
+        run: |
+          snyk test --all-projects --json > snyk-code-results.json || true
+          snyk-to-html -i snyk-code-results.json -o snyk-code-results.html || true
+          snyk test --all-projects > snyk-code-results.txt || true
+          # Ensure output files exist
+          [ -f snyk-code-results.json ] || touch snyk-code-results.json
+          [ -f snyk-code-results.txt ] || touch snyk-code-results.txt
+          [ -f snyk-code-results.html ] || touch snyk-code-results.html
+
+      - name: Run Snyk test for IaC
+        id: snyk-iac
+        continue-on-error: true
+        run: |
+          snyk iac test --json > snyk-iac-results.json || true
+          snyk iac test > snyk-iac-results.txt || true
+          # Ensure output files exist
+          [ -f snyk-iac-results.json ] || touch snyk-iac-results.json
+          [ -f snyk-iac-results.txt ] || touch snyk-iac-results.txt
+
+      - name: Combine Snyk Results
+        run: |
+          echo '### Snyk Code Test Results' > snyk-results.md
+          cat snyk-code-results.txt >> snyk-results.md
+          echo -e '\n---\n' >> snyk-results.md
+          echo '### Snyk IaC Test Results' >> snyk-results.md
+          cat snyk-iac-results.txt >> snyk-results.md
+
+      - name: Upload Snyk Results as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-results
+          path: |
+            snyk-code-results.json
+            snyk-code-results.html
+            snyk-iac-results.json
+            snyk-results.md
+
+      - name: Post Snyk Results as PR Comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: snyk-results.md
+    
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      SNYK_API: https://api.us.snyk.io
