@@ -28,11 +28,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Set up Python (for Markdown formatting)
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
       - name: Install Snyk CLI and HTML reporter
         run: |
           npm install -g snyk
@@ -62,16 +57,13 @@ jobs:
           echo "===== Snyk IaC Test Results ====="
           cat snyk-iac-results.txt
 
-      - name: Create scripts directory
-        run: mkdir -p .github/scripts
-
-      - name: Copy Snyk Markdown Formatter Script
+      - name: Combine Snyk Results
         run: |
-          cp $GITHUB_WORKSPACE/.github/scripts/snyk_md_formatter.py .github/scripts/
-          chmod +x .github/scripts/snyk_md_formatter.py
-
-      - name: Format Snyk Results as Markdown
-        run: python3 .github/scripts/snyk_md_formatter.py
+          echo '### Snyk Code Test Results' > snyk-results.md
+          cat snyk-code-results.txt >> snyk-results.md
+          echo -e '\n---\n' >> snyk-results.md
+          echo '### Snyk IaC Test Results' >> snyk-results.md
+          cat snyk-iac-results.txt >> snyk-results.md
 
       - name: Upload Snyk Results as Artifacts
         uses: actions/upload-artifact@v4
