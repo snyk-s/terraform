@@ -1,0 +1,59 @@
+
+name: Snyk Security Scan
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+
+jobs:
+  snyk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (for Snyk CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Snyk CLI
+        run: npm install -g snyk
+
+      - name: Authenticate Snyk
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk auth $SNYK_TOKEN
+
+      - name: Snyk Open Source Dependency Scan
+        run: snyk test --all-projects --json-file-output=snyk-deps.json
+        continue-on-error: true
+
+      - name: Snyk Code (SAST) Scan
+        run: snyk code test --json-file-output=snyk-code.json
+        continue-on-error: true
+
+      - name: Snyk IaC Scan
+        run: snyk iac test --json-file-output=snyk-iac.json
+        continue-on-error: true
+
+      - name: Upload Snyk Results as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-results
+          path: |
+            snyk-deps.json
+            snyk-code.json
+            snyk-iac.json
+
+      - name: Display Snyk Results (summary)
+        run: |
+          echo "Dependency scan:"
+          cat snyk-deps.json
+          echo "Code scan:"
+          cat snyk-code.json
+          echo "IaC scan:"
+          cat snyk-iac.json
