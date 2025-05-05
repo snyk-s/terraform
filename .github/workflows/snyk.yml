@@ -33,16 +33,23 @@ jobs:
         id: snyk-code
         continue-on-error: true
         run: |
-          snyk test --all-projects --json > snyk-code-results.json
+          snyk test --all-projects --json > snyk-code-results.json || true
           snyk-to-html -i snyk-code-results.json -o snyk-code-results.html || true
           snyk test --all-projects > snyk-code-results.txt || true
+          # Ensure output files exist
+          [ -f snyk-code-results.json ] || touch snyk-code-results.json
+          [ -f snyk-code-results.txt ] || touch snyk-code-results.txt
+          [ -f snyk-code-results.html ] || touch snyk-code-results.html
 
       - name: Run Snyk test for IaC
         id: snyk-iac
         continue-on-error: true
         run: |
-          snyk iac test --json > snyk-iac-results.json
+          snyk iac test --json > snyk-iac-results.json || true
           snyk iac test > snyk-iac-results.txt || true
+          # Ensure output files exist
+          [ -f snyk-iac-results.json ] || touch snyk-iac-results.json
+          [ -f snyk-iac-results.txt ] || touch snyk-iac-results.txt
 
       - name: Combine Snyk Results
         run: |
