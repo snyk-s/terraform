@@ -14,7 +14,7 @@ on:
 jobs:
   snyk:
     runs-on: ubuntu-latest
-      SNYK_API: https://api.us.snyk.io
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -70,3 +70,4 @@ jobs:
     
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      SNYK_API: https://api.us.snyk.io
