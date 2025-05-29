@@ -1,0 +1,71 @@
+name: 'Snyk Code Security Scan'
+description: 'Runs Snyk code security scanning and generates reports'
+
+inputs:
+  snyk-token:
+    description: 'Snyk API token'
+    required: true
+  snyk-api:
+    description: 'Snyk API endpoint'
+    required: false
+    default: 'https://api.us.snyk.io'
+
+outputs:
+  results-json:
+    description: 'Path to the JSON results file'
+    value: ${{ steps.set-outputs.outputs.results-json }}
+  results-html:
+    description: 'Path to the HTML results file'
+    value: ${{ steps.set-outputs.outputs.results-html }}
+  results-txt:
+    description: 'Path to the text results file'
+    value: ${{ steps.set-outputs.outputs.results-txt }}
+  results-md:
+    description: 'Path to the markdown results file'
+    value: ${{ steps.set-outputs.outputs.results-md }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Snyk CLI and HTML reporter
+      shell: bash
+      run: |
+        npm install -g snyk
+        npm install -g snyk-to-html
+
+    - name: Run Snyk test foendencies
+      id: snyk-code
+      continue-on-error: true
+      shell: bash
+      run: |
+        snyk test --all-projects --json > snyk-code-results.json || true
+        snyk-to-html -i snyk-code-results.json -o snyk-code-results.html || true
+        snyk test --all-projects > snyk-code-results.txt || true
+        [ -f snyk-codeprojectsson ] || touch snyk-code-results.json
+        [ -f snyk-code-results.txt ] || touch snyk-code-results.txt
+        [ -f snyk-code-results.html ] || touch snyk-code-results.html
+        echo "===== Snyk Code Test Results ====="
+        cat snyk-code-results.txt
+      env:
+        SNYK_TOKEN: ${{ inputs.snyk-token }}
+        SNYK_API: ${{ inputs.snyk-api }}
+
+    - name: Create Markdown Report
+      shell: bash
+      run: |
+        echo '### Snyk Code Test Results' > snyk-code-results.md
+        cat snyk-code-results.txt >> snyk-code-results.md
+
+    - name: Set outputs
+      id: set-outputs
+      shell: bash
+      run: |
+        echo "results-json=snyk-code-results.json" >> $GITHUB_OUTPUT
+        echo "results-html=snyk-code-results.html" >> $GITHUB_OUTPUT
+        echo "results-txt=snyk-code-results.txt" >> $GITHUB_OUTPUT
+        echo "results-md=snyk-code-results.md" >> $GITHUB_OUTPUT

@@ -1,0 +1,105 @@
+name: Snyk Security Scan
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+      - dev
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  snyk-code-scan:
+    name: Snyk Code Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Snyk Code Security Scan
+        id: snyk-code
+        uses: ./.github/actions/snyk-code
+        with:
+          snyk-token: ${{ secrets.SNYK_TOKEN }}
+          snyk-api: https://api.us.snyk.io
+          
+      - name: Upload Snyk Code Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-code-results
+          path: |
+            ${{ steps.snyk-code.outputs.results-json }}
+            ${{ steps.snyk-code.outputs.results-html }}
+            ${{ steps.snyk-code.outputs.results-txt }}
+            ${{ steps.snyk-code.outputs.results-md }}
+          retention-days: 5
+
+  snyk-iac-scan:
+    name: Snyk IaC Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Snyk IaC Security Scan
+        id: snyk-iac
+        uses: ./.github/actions/snyk-iac
+        with:
+          snyk-token: ${{ secrets.SNYK_TOKEN }}
+          snyk-api: https://api.us.snyk.io
+          
+      - name: Upload Snyk IaC Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-iac-results
+          path: |
+            ${{ steps.snyk-iac.outputs.results-json }}
+            ${{ steps.snyk-iac.outputs.results-txt }}
+            ${{ steps.snyk-iac.outputs.results-md }}
+          retention-days: 5
+
+  combine-results:
+    name: Combine Scan Results
+    needs: [snyk-code-scan, snyk-iac-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Download Snyk Code Results
+        uses: actions/download-artifact@v4
+        with:
+          name: snyk-code-results
+          
+      - name: Download Snyk IaC Results
+        uses: actions/download-artifact@v4
+        with:
+          name: snyk-iac-results
+          
+      - name: Combine Snyk Results
+        run: |
+          echo '### Snyk Code Test Results' > snyk-combined-results.md
+          cat snyk-code-results.txt >> snyk-combined-results.md
+          echo -e '\n---\n' >> snyk-combined-results.md
+          echo '### Snyk IaC Test Results' >> snyk-combined-results.md
+          cat snyk-iac-results.txt >> snyk-combined-results.md
+          
+      - name: Upload Combined Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-combined-results
+          path: snyk-combined-results.md
+          retention-days: 5
+          
+      - name: Post Snyk Results as PR Comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: snyk-combined-results.md
