@@ -1,6 +1,8 @@
 module github.com/snyk/snyk-code-review-exercise
 
-go 1.16
+go 1.21
+
+toolchain go1.23.5
 
 require (
 	github.com/Masterminds/semver/v3 v3.1.1
