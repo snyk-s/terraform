@@ -105,3 +105,90 @@ jobs:
           # or you can signup for free at https://snyk.io/login
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
           SNYK_API: https://api.us.snyk.io
+
+
+
+
+
+
+
+
+
+
+
+          name: Snyk IaC Scan
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  snyk-iac:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Run Snyk to check configuration files for security issues
+        id: snyk-iac
+        uses: snyk/actions/iac@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          SNYK_API: https://api.us.snyk.io
+        with:
+          args: --json-file-output=snyk-iac-output.json
+
+      - name: Debug - Print Snyk IaC JSON output
+        if: always()
+        run: |
+          echo "===== snyk-iac-output.json ====="
+          cat snyk-iac-output.json || echo "No output file found"
+          echo "==============================="
+
+      - name: Summarize Snyk IaC results for PR comment
+        id: summarize
+        run: |
+          if [ -f snyk-iac-output.json ]; then
+            count=$(jq '[.[].infrastructureAsCodeIssues[]?] | length' snyk-iac-output.json)
+            if [ "$count" -eq 0 ]; then
+              echo "No issues found." > snyk-iac-summary.txt
+            else
+              echo "Found $count IaC issues:" > snyk-iac-summary.txt
+              jq -r '.[] | select(.infrastructureAsCodeIssues != null and (.infrastructureAsCodeIssues | length > 0)) | .targetFile as $file | .infrastructureAsCodeIssues[] | "- [" + $file + "] " + .title + " (" + .severity + ")"' snyk-iac-output.json >> snyk-iac-summary.txt
+            fi
+          else
+            echo "No Snyk output found." > snyk-iac-summary.txt
+          fi
+
+      - name: Post Snyk IaC results as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('snyk-iac-summary.txt', 'utf8');
+            const body = [
+              '## :mag: Snyk Infrastructure as Code (IaC) Scan Results',
+              '```',
+              output.length > 65000 ? output.slice(0, 65000) + '\n...truncated...' : output,
+              '```',
+              '_Full JSON report is available as a workflow artifact._'
+            ].join('\n');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+
+      - name: Upload Snyk IaC JSON report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-iac-json-report
+          path: snyk-iac-output.json

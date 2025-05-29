@@ -1,0 +1,64 @@
+name: 'Snyk IaC Security Scan'
+description: 'Runs Snyk Infrastructure as Code security scanning and generates reports'
+
+inputs:
+  snyk-token:
+    description: 'Snyk API token'
+    required: true
+  snyk-api:
+    description: 'Snyk API endpoint'
+    required: false
+    default: 'https://api.us.snyk.io'
+
+outputs:
+  results-json:
+    description: 'Path to the JSON results file'
+    value: ${{ steps.set-outputs.outputs.results-json }}
+  results-txt:
+    description: 'Path to the text results file'
+    value: ${{ steps.set-outputs.outputs.results-txt }}
+  results-md:
+    description: 'Path to the markdown results file'
+    value: ${{ steps.set-outputs.outputs.results-md }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Snyk CLI
+      shell: bash
+      run: |
+        npm install -g snyk
+
+    - name: Run Snyk test for IaC
+      id: snyk-iac
+      continue-on-error: true
+      shell: bash
+      run: |
+        snyk iac test --json > snyk-iac-results.json || true
+        snyk iac test > snyk-iac-results.txt || true
+        [ -f snyk-iac-results.json ] || touch snyk-iac-results.json
+        [ -f snyk-iac-results.txt ] || touch snyk-iac-results.txt
+        echo "===== Snyk IaC Test Results ====="
+        cat snyk-iac-results.txt
+      env:
+        SNYK_TOKEN: ${{ inputs.snyk-token }}
+        SNYK_API: ${{ inputs.snyk-api }}
+
+    - name: Create Markdown Report
+      shell: bash
+      run: |
+        echo '### Snyk IaC Test Results' > snyk-iac-results.md
+        cat snyk-iac-results.txt >> snyk-iac-results.md
+
+    - name: Set outputs
+      id: set-outputs
+      shell: bash
+      run: |
+        echo "results-json=snyk-iac-results.json" >> $GITHUB_OUTPUT
+        echo "results-txt=snyk-iac-results.txt" >> $GITHUB_OUTPUT
+        echo "results-md=snyk-iac-results.md" >> $GITHUB_OUTPUT
